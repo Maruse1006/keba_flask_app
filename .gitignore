@@ -15,3 +15,9 @@ __pycache__/
 Thumbs.db
 .idea/
 .vscode/
+
+# secrets
+.env
+*.keystore
+*.pem
+*.p12
