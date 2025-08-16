@@ -1,0 +1,17 @@
+# secrets
+.env
+*.keystore
+*.pem
+*.p12
+
+# python
+venv/
+.envrc
+__pycache__/
+*.pyc
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
-from flask_migrate import Migrate  # ← 追加！
+from flask_migrate import Migrate
 
 from models import db, bcrypt
 from register import register_blueprint
@@ -16,48 +16,70 @@ from bet import bet_api_blueprint
 import os
 from dotenv import load_dotenv
 
-# .env を読み込む
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)
+def create_app():
+    app = Flask(__name__)
 
-# 環境変数から設定を読み込む
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+    # ── CORS（本番ドメインだけ許可） ───────────────────────────
+    ALLOWED_ORIGINS = [
+        "https://horse-racing-react.vercel.app",  # フロント(Vercel)
+        "https://keiba-app.com",                  # Expo/外部クライアント
+        "http://localhost:3000",                  # 開発用（必要なら）
+        "http://localhost:5173",                  # 開発用（Viteなど）
+    ]
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ALLOWED_ORIGINS,
+            # Cookieを使わないなら supports_credentials は不要（Falseのまま）
+            "allow_headers": ["Authorization", "Content-Type"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        }
+    })
 
-# ライブラリの初期化
-db.init_app(app)
-bcrypt.init_app(app)
-jwt = JWTManager(app)
-migrate = Migrate(app, db)  # ← 追加！
+    # ── 設定 ────────────────────────────────────────────────
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
 
-# JWTエラーハンドラ
-@jwt.unauthorized_loader
-def custom_unauthorized_response(err_str):
-    print(f"[JWT ERROR] Missing or invalid auth header: {err_str}")
-    return jsonify({"error": "Missing or invalid Authorization header"}), 401
+    # ── ライブラリ初期化 ─────────────────────────────────────
+    db.init_app(app)
+    bcrypt.init_app(app)
+    JWTManager(app)
+    Migrate(app, db)
 
-@jwt.invalid_token_loader
-def custom_invalid_token_response(err_str):
-    print(f"[JWT ERROR] Invalid token: {err_str}")
-    return jsonify({"error": "Invalid token"}), 422
+    # ── Blueprint登録 ───────────────────────────────────────
+    app.register_blueprint(register_blueprint, url_prefix='/api')
+    app.register_blueprint(login_blueprint, url_prefix='/api')
+    app.register_blueprint(get_horses_blueprint, url_prefix='/api')
+    app.register_blueprint(check_payout_blueprint, url_prefix='/api')
+    app.register_blueprint(get_daily_profit_blueprint, url_prefix='/api')
+    app.register_blueprint(horse_pedigree_api_blueprint, url_prefix='/api')
+    app.register_blueprint(bet_api_blueprint, url_prefix='/api')
 
-@jwt.expired_token_loader
-def custom_expired_token_response(jwt_header, jwt_payload):
-    print(f"[JWT ERROR] Token expired")
-    return jsonify({"error": "Token expired"}), 401
+    # ── ヘルスチェック ──────────────────────────────────────
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok"}
 
-# Blueprint登録
-app.register_blueprint(register_blueprint, url_prefix='/api')
-app.register_blueprint(login_blueprint, url_prefix='/api')
-app.register_blueprint(get_horses_blueprint, url_prefix='/api')
-app.register_blueprint(check_payout_blueprint, url_prefix='/api')
-app.register_blueprint(get_daily_profit_blueprint, url_prefix='/api')
-app.register_blueprint(horse_pedigree_api_blueprint, url_prefix='/api')
-app.register_blueprint(bet_api_blueprint, url_prefix='/api')
+    # ── JWTエラーハンドラ ───────────────────────────────────
+    jwt = JWTManager(app)
 
-# 開発環境用サーバー起動
+    @jwt.unauthorized_loader
+    def _unauth(err_str):
+        return jsonify({"error": "Missing or invalid Authorization header"}), 401
+
+    @jwt.invalid_token_loader
+    def _invalid(err_str):
+        return jsonify({"error": "Invalid token"}), 422
+
+    @jwt.expired_token_loader
+    def _expired(jwt_header, jwt_payload):
+        return jsonify({"error": "Token expired"}), 401
+
+    return app
+
+# 開発用（python app.py で動かす時だけ）
 if __name__ == '__main__':
+    app = create_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
