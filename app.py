@@ -24,6 +24,7 @@ def create_app():
     # ── CORS（本番ドメインだけ許可） ───────────────────────────
     ALLOWED_ORIGINS = [
         "https://horse-racing-react.vercel.app",  # フロント(Vercel)
+        "https://keiba-app.com",
         "https://keiba-app.com",                  # Expo/外部クライアント
         "http://localhost:3000",                  # 開発用（必要なら）
         "http://localhost:5173",                  # 開発用（Viteなど）
